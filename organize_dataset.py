@@ -14,8 +14,8 @@ with open('classes.txt') as fp:
        folder_name = class_name.split('.')[0]
        train_count[folder_name] = 1
        test_count[folder_name]  = 1
-       os.system('mkdir ./dataset/train/{}'.format('class_' + str(folder_name)))
-       os.system('mkdir ./dataset/test/{}'.format('class_' + str(folder_name)))
+       os.system('mkdir -p ./dataset/train/{}'.format('class_' + str(folder_name)))
+       os.system('mkdir -p ./dataset/test/{}'.format('class_' + str(folder_name)))
        line = fp.readline()
 
 with open('train_test_split.txt') as fp:

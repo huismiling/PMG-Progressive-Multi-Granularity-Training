@@ -7,7 +7,28 @@ from torchvision import transforms, models
 import torch.nn.functional as F
 from model import *
 from Resnet import *
+import torch.backends.cudnn as cudnn
+from contextlib import contextmanager
+import torch.distributed as dist
 
+def init_seeds(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+    cudnn.benchmark = False
+    cudnn.deterministic = True
+
+@contextmanager
+def torch_distributed_zero_first(local_rank: int):
+    # Decorator to make all processes in distributed training wait for each local_master to do something
+    if local_rank not in [-1, 0]:
+        dist.barrier(device_ids=[local_rank])
+    yield
+    if local_rank == 0:
+        dist.barrier(device_ids=[0])
 
 def cosine_anneal_schedule(t, nb_epoch, lr):
     cos_inner = np.pi * (t % (nb_epoch))  # t - 1 is used when t has 1-based indexing.
@@ -58,7 +79,7 @@ def jigsaw_generator(images, n):
     return jigsaws
 
 
-def test(net, criterion, batch_size):
+def test(net, criterion, batch_size, device):
     net.eval()
     use_cuda = torch.cuda.is_available()
     test_loss = 0
@@ -66,7 +87,7 @@ def test(net, criterion, batch_size):
     correct_com = 0
     total = 0
     idx = 0
-    device = torch.device("cuda:0,1")
+    # device = torch.device("cuda")
 
     transform_test = transforms.Compose([
         transforms.Scale((550, 550)),
@@ -74,30 +95,30 @@ def test(net, criterion, batch_size):
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
-    testset = torchvision.datasets.ImageFolder(root='./bird/test',
+    testset = torchvision.datasets.ImageFolder(root='./CUB_200_2011/dataset/test',
                                                transform=transform_test)
     testloader = torch.utils.data.DataLoader(testset, batch_size=batch_size, shuffle=True, num_workers=4)
 
-    for batch_idx, (inputs, targets) in enumerate(testloader):
-        idx = batch_idx
-        if use_cuda:
-            inputs, targets = inputs.to(device), targets.to(device)
-        inputs, targets = Variable(inputs, volatile=True), Variable(targets)
-        output_1, output_2, output_3, output_concat= net(inputs)
-        outputs_com = output_1 + output_2 + output_3 + output_concat
+    with torch.no_grad():
+        for batch_idx, (inputs, targets) in enumerate(testloader):
+            idx = batch_idx
+            if use_cuda:
+                inputs, targets = inputs.to(device), targets.to(device)
+            output_1, output_2, output_3, output_concat= net(inputs)
+            outputs_com = output_1 + output_2 + output_3 + output_concat
 
-        loss = criterion(output_concat, targets)
+            loss = criterion(output_concat, targets)
 
-        test_loss += loss.item()
-        _, predicted = torch.max(output_concat.data, 1)
-        _, predicted_com = torch.max(outputs_com.data, 1)
-        total += targets.size(0)
-        correct += predicted.eq(targets.data).cpu().sum()
-        correct_com += predicted_com.eq(targets.data).cpu().sum()
+            test_loss += loss.item()
+            _, predicted = torch.max(output_concat.data, 1)
+            _, predicted_com = torch.max(outputs_com.data, 1)
+            total += targets.size(0)
+            correct += predicted.eq(targets.data).cpu().sum()
+            correct_com += predicted_com.eq(targets.data).cpu().sum()
 
-        if batch_idx % 50 == 0:
-            print('Step: %d | Loss: %.3f | Acc: %.3f%% (%d/%d) |Combined Acc: %.3f%% (%d/%d)' % (
-            batch_idx, test_loss / (batch_idx + 1), 100. * float(correct) / total, correct, total, 100. * float(correct_com) / total, correct_com, total))
+            if batch_idx % 50 == 0:
+                print('Step: %d | Loss: %.3f | Acc: %.3f%% (%d/%d) |Combined Acc: %.3f%% (%d/%d)' % (
+                batch_idx, test_loss / (batch_idx + 1), 100. * float(correct) / total, correct, total, 100. * float(correct_com) / total, correct_com, total))
 
     test_acc = 100. * float(correct) / total
     test_acc_en = 100. * float(correct_com) / total

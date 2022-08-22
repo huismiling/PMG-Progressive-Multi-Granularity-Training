@@ -57,7 +57,7 @@ class PMG(nn.Module):
             nn.Linear(feature_size, classes_num),
         )
 
-    def forward(self, x):
+    def forward(self, x, stage=-1):
         xf1, xf2, xf3, xf4, xf5 = self.features(x)
 
         xl1 = self.conv_block1(xf3)
@@ -67,17 +67,25 @@ class PMG(nn.Module):
         xl1 = self.max1(xl1)
         xl1 = xl1.view(xl1.size(0), -1)
         xc1 = self.classifier1(xl1)
+        if stage==1:
+            return xc1
 
         xl2 = self.max2(xl2)
         xl2 = xl2.view(xl2.size(0), -1)
         xc2 = self.classifier2(xl2)
+        if stage==2:
+            return xc2
 
         xl3 = self.max3(xl3)
         xl3 = xl3.view(xl3.size(0), -1)
         xc3 = self.classifier3(xl3)
-          
+        if stage==3:
+            return xc3
+
         x_concat = torch.cat((xl1, xl2, xl3), -1)
         x_concat = self.classifier_concat(x_concat)
+        if stage==4:
+            return x_concat
         return xc1, xc2, xc3, x_concat
     
     

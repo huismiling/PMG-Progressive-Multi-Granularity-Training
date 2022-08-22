@@ -12,6 +12,7 @@ from utils import *
 
 
 def train(nb_epoch, batch_size, store_name, resume=False, start_epoch=0, model_path=None):
+    init_seeds(0)
     # setup output
     exp_dir = store_name
     try:
@@ -31,7 +32,7 @@ def train(nb_epoch, batch_size, store_name, resume=False, start_epoch=0, model_p
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
-    trainset = torchvision.datasets.ImageFolder(root='./bird/train', transform=transform_train)
+    trainset = torchvision.datasets.ImageFolder(root='CUB_200_2011/dataset/train/', transform=transform_train)
     trainloader = torch.utils.data.DataLoader(trainset, batch_size=batch_size, shuffle=True, num_workers=4)
 
     # Model
@@ -39,10 +40,10 @@ def train(nb_epoch, batch_size, store_name, resume=False, start_epoch=0, model_p
         net = torch.load(model_path)
     else:
         net = load_model(model_name='resnet50_pmg', pretrain=True, require_grad=True)
-    netp = torch.nn.DataParallel(net, device_ids=[0,1])
+    netp = net.cuda()
 
     # GPU
-    device = torch.device("cuda:0,1")
+    device = torch.device("cuda")
     net.to(device)
     # cudnn.benchmark = True
 
